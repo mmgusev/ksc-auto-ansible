@@ -1,0 +1,34 @@
+# Версия PostgreSQL
+postgresql_version: 15
+# Путь к конфмгурационному файлу postgresql
+postgresql_conf_path: "/etc/postgresql/{{postgresql_version}}/main/postgresql.conf"
+# Переменные для настройки репозитария postgres
+repos:
+  debian:
+    repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    key_url: "https://www.postgresql.org/media/keys/ACCC4CF8.asc"
+# Имя пакета postgres
+pkg_name: "{{ 'postgresql-' + postgresql_version | string }}"
+
+# install_type offline при установке из предварительно загруженных пакетов
+# install_type online для загрузки пакетов из сети
+install_type: "offline"
+# Если установка из скаченного пакета, то в deb_pkg_name указывается полный путь, если онлайн установка - то url
+# https://products.s.kaspersky-labs.com/administrationkit/ksc10/15.1.0.11795/russian-18886828-ru/3834323230397c44454c7c31/ksc64_15.1.0-11795_amd64.deb
+ksc_deb_pkg_path: /home/user/ksc64_15.1.0-11795_amd64.deb
+# https://products.s.kaspersky-labs.com/administrationkit/ksc10/15.1.0.11795/russian-18886828-ru/3834323231337c44454c7c31/ksc-web-console-15.1.523.x86_64.deb
+kscweb_deb_pkg_path: /home/user/ksc-web-console-15.1.523.x86_64.deb
+# Имя файла установочного пакета
+ksc_deb_pkg_name: "{{ ksc_deb_pkg_path | regex_search ('(?:^|.*[\\/\\\\])(ksc[^\\/\\\\]*\\.deb)$', '\\1') }}"
+kscweb_deb_pkg_name: "{{ kscweb_deb_pkg_path | regex_search ('(?:^|.*[\\/\\\\])(ksc[^\\/\\\\]*\\.deb)$', '\\1') }}"
+# Временная дериктория
+temp_path: /tmp
+# IP-адрес KSC. Используем IP-адрес хоста по которуму подключаемся "{{ ansible_default_ipv4.address }}"
+# или указываем другой
+ip_address: "{{ ansible_default_ipv4.address }}"
+# Порт Web консоли
+kscweb_port: 8080
+# Пользоваетль Web консоли
+kscweb_user: ksc
+# Пароль пользователя Web консоли
+kscweb_pass: P@ssw0rd

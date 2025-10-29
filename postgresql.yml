@@ -1,0 +1,119 @@
+---
+- name: Установка и настройка PostgreSQL. Создание пользователя и базы данных, а также назначение всех нужных привилегии для пользователя.
+  hosts: all
+  become: yes
+  # Все переменные хранятся в фале ./vars.yml 
+  vars_files:
+    ./vars.yml
+    
+  tasks:
+    - name: Добавление GPG ключа
+      apt_key:
+        url: "{{ repos['debian'].key_url }}"
+        state: present
+
+    - name: Настройка репозитория PostgreSQL
+      apt_repository:
+        repo: "{{ repos['debian'].repo }}"
+        state: present
+
+    - name: Установка PostgreSQL
+      package:
+        update_cache: yes
+        name: "{{ pkg_name }}"
+        state: present
+
+    - name: Включение и запуск службы PostgreSQL
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: Создание переменной для вывода версии PostgreSQL
+      shell: |
+        psql --version | tee /dev/tty
+      register: psql_version_output
+
+    - name: Вывод версии PostgreSQL
+      ansible.builtin.debug:
+        msg: "PostgreSQL version: {{ psql_version_output.stdout }}"
+
+    - name: Получение значения максимального размера стека (ulimit -s)
+      command: bash -c 'ulimit -s'
+      register: ulimit_output
+      changed_when: false
+
+    - name: Настройка PostgreSQL - max_stack_depth
+      community.general.ini_file:
+        path: "{{ postgresql_conf_path }}"
+        option: "max_stack_depth"
+        value: "{{  (ulimit_output.stdout | int) - 1024  }}kB		# max stack depth minus 1 MB"
+        create: yes
+        backup: yes
+
+    - name: Настройка PostgreSQL - shared_buffers
+      community.general.ini_file:
+        path: "{{ postgresql_conf_path }}"
+        option: "shared_buffers"
+        value: "{{ (ansible_memtotal_mb * 0.25) | int }}MB	# shared memory buffers"
+        create: yes
+      when: ansible_memtotal_mb > 1024 # Меняется если значение ОЗУ больше 1 Гб, в противном случае не меняется
+
+    - name: Настройка PostgreSQL - temp_buffers
+      community.general.ini_file:
+        path: "{{ postgresql_conf_path }}"
+        option: "temp_buffers"
+        value: "24MB		# temporary buffers"
+        create: yes
+
+    - name: Настройка PostgreSQL - work_mem
+      community.general.ini_file:
+        path: "{{ postgresql_conf_path }}"
+        option: "work_mem"
+        value: "16MB		# work memory"
+        create: yes
+
+    - name: Настройка PostgreSQL - max_connections
+      community.general.ini_file:
+        path: "{{ postgresql_conf_path }}"
+        option: "max_connections"
+        value: "151		# maximum number of connections"
+        create: yes
+
+    - name: Настройка PostgreSQL - max_parallel_workers_per_gather
+      community.general.ini_file:
+        path: "{{ postgresql_conf_path }}"
+        option: "max_parallel_workers_per_gather"
+        value: "0		# maximum number of parallel workers per gather"
+        create: yes
+
+    - name: Настройка PostgreSQL - maintenance_work_mem
+      community.general.ini_file:
+        path: "{{ postgresql_conf_path }}"
+        option: "maintenance_work_mem"
+        value: "128MB		# maintenance work memory"
+        create: yes
+
+    - name: Добавление записи для административного входа в базу данных с помощью доменного сокета Unix
+      lineinfile:
+        path: "/etc/postgresql/15/main/pg_hba.conf"
+        insertafter: '^# Database administrative login by Unix domain socket'
+        line: "local   all             KSCAdmin                                md5"
+        create: yes
+
+    - name: Перезагрузка PostgreSQL
+      systemd:
+        name: postgresql
+        state: reloaded
+
+    - name: Создание пользователя KSCAdmin и базы данных kav, а также назначение всех нужных привилегии для пользователя
+      command: sudo -u postgres psql
+      args:
+        executable: /bin/bash
+        stdin: |
+          CREATE USER "KSCAdmin" WITH PASSWORD 'P@ssw0rd';
+          CREATE DATABASE "kav" ENCODING 'UTF8' OWNER "KSCAdmin";
+          GRANT ALL PRIVILEGES ON DATABASE "kav" TO "KSCAdmin";
+          GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA "public" TO "KSCAdmin";
+          GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA "public" TO "KSCAdmin";
+          \q

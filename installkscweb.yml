@@ -1,0 +1,43 @@
+---
+- name: Настройка и установка KSC Web console
+  hosts: all
+  become: yes
+  vars_files:
+    ./vars.yml
+  tasks:
+
+    - name: Создание конфигурационного файла /etc/ksc-web-console-setup.json
+      copy:
+        dest: /etc/ksc-web-console-setup.json
+        content: |
+          {
+            "address": "{{ ip_address }}",
+            "port": {{ kscweb_port }},
+            "trusted": "{{ ip_address }}|13299|/var/opt/kaspersky/klnagent_srv/1093/cert/klserver.cer|KSC Server",
+            "acceptEula": true
+          }
+
+    - name: Скачать пакет установки KSC Web Console (online-установка) в {{ temp_path }}
+      get_url:
+        url: '{{ kscweb_deb_pkg_path }}'
+        dest: '{{ temp_path }}/{{ kscweb_deb_pkg_name[0] }}'
+      when: install_type == "online"
+
+    - name: Скопировать пакет установки KSC Web Console (offline-установка) в {{ temp_path }}
+      copy:
+        src: '{{ kscweb_deb_pkg_path }}'
+        dest: '{{ temp_path }}/{{ kscweb_deb_pkg_name[0] }}'
+      when: install_type == "offline"
+
+    - name: Установка пакета ksc-web-console
+      apt:
+        deb: '{{ temp_path }}/{{ kscweb_deb_pkg_name[0] }}'
+    
+    - name: Создание учетной записи {{ kscweb_user }} для работы с Kaspersky Security Center Web Console
+      command: "sudo /opt/kaspersky/ksc64/sbin/kladduser -n {{ kscweb_user }} -p {{ kscweb_pass }}"
+
+    - name: Перезагрузка сервисов KSC
+      command: systemctl restart KSC*
+
+    - name: Удалить все deb файлы, начинающиеся на ksc
+      command: find {{ temp_path }} -name 'ksc*.deb' -exec rm -f {} +

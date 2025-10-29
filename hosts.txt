@@ -1,0 +1,7 @@
+[servers]
+Debian    ansible_host=<ip-адрес>
+
+[servers:vars]
+#имя пользователя
+ansible_user=ec2-user
+ansible_ssh_private_key_file=/home/user/ansible/user.pem

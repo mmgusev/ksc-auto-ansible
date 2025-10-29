@@ -1,0 +1,64 @@
+---
+- name: Установка и настройка KSC
+  hosts: all
+  become: yes
+
+  vars_files:
+    ./vars.yml
+
+  tasks:
+    - name: Добавить пользователя 'ksc'
+      user:
+        name: ksc
+
+    - name: Добавить группу 'kladmins'
+      group:
+        name: kladmins
+
+    - name: Добавить пользователя 'ksc' в группу 'kladmins'
+      command: gpasswd -a ksc kladmins
+
+    - name: Изменить основную группу пользователя 'ksc' на 'kladmins'
+      command: usermod -g kladmins ksc
+
+    - name: Скачать пакет установки KSC (online-установка) в {{ temp_path }}
+      get_url:
+        url: '{{ ksc_deb_pkg_url }}'
+        dest: '{{ temp_path }}/{{ ksc_deb_pkg_name[0] }}'
+      when: install_type == "online"
+
+    - name: Скопировать пакет установки KSC (offline-установка) в {{ temp_path }}
+      copy:
+        src: '{{ ksc_deb_pkg_path }}'
+        dest: '{{ temp_path }}/{{ ksc_deb_pkg_name[0] }}'
+      when: install_type == "offline"
+
+    - name: Установить пакет Kaspersky
+      apt:
+        deb: '{{ temp_path }}/{{ ksc_deb_pkg_name[0] }}'
+
+    - name: Скопировать answers.txt на хост
+      copy:
+        src: answers.txt
+        dest: '{{ temp_path }}/answers.txt'
+        mode: '0755'
+
+    - name: Редактирование файла автоответов answers.txt
+      community.general.ini_file:
+        path: '{{ temp_path }}/answers.txt'
+        value: KLSRV_UNATT_SERVERADDRESS
+        option: '{{ ip_address }}'
+        state: present
+
+    - name: Установка KSC с файлом автоответов answers.txt
+      command: "sudo KLAUTOANSWERS={{ temp_path }}/answers.txt /opt/kaspersky/ksc64/lib/bin/setup/postinstall.pl"
+      args:
+        chdir: '{{ temp_path }}'
+
+    - name: Удалить все deb файлы, начинающиеся на ksc из {{ temp_path }}
+      command: find {{ temp_path }} -name 'ksc*.deb' -exec rm -f {} +
+
+    - name: Удалить файл ответов answers.txt из {{ temp_path }}
+      file:
+        path: '{{ temp_path }}/answers.txt'
+        state: absent
