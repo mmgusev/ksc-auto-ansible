@@ -1,0 +1,1 @@
+# ksc-auto-ansible
